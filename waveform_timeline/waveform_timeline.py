@@ -15,14 +15,16 @@ from array import array
 
 try:  # Krita 5.2+ pode rodar em PyQt6 ou PyQt5
     from PyQt6.QtWidgets import (
-        QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTableView)
+        QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTableView,
+        QSpinBox)
     from PyQt6.QtGui import QPainter, QColor, QPen
     from PyQt6.QtCore import Qt, QTimer, QPointF, QEvent
     _ALIGN_CENTER = Qt.AlignmentFlag.AlignCenter
     _PAINT_EVENT_TYPE = QEvent.Type.Paint
 except ImportError:
     from PyQt5.QtWidgets import (
-        QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTableView)
+        QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTableView,
+        QSpinBox)
     from PyQt5.QtGui import QPainter, QColor, QPen
     from PyQt5.QtCore import Qt, QTimer, QPointF, QEvent
     _ALIGN_CENTER = Qt.AlignCenter
@@ -259,6 +261,26 @@ class WaveformDocker(DockWidget):
         self._scrub_proc = None
         self._last_scrub_time = 0.0
 
+        # Estimativa do frame durante o Play nativo: confirmado
+        # empiricamente que TUDO que da pra ler via scripting nesses
+        # widgets (currentTime(), currentIndex() da tabela, offset/zoom
+        # do cabecalho, ate o estado do botao Play/Pause) fica congelado
+        # durante a reproducao nativa - so o repaint visual continua. A
+        # unica pista real e a frequencia desses repaints: durante o Play
+        # eles chegam em rajada rapida (a cada frame); parados ou ociosos,
+        # sao esporadicos. Usamos isso como sinal de "esta tocando".
+        self._play_started_at = None
+        self._play_started_frame = 0
+        self._last_viewport_paint_at = 0.0
+        self._viewport_paint_gap = 999.0
+        self._speed_spinbox = None  # QSpinBox "Velocidade" (25-200%)
+        self._last_speed = None
+        # fps nominal do documento nem sempre bate com a velocidade real
+        # de reproducao alcancada (renderizacao pode ser mais lenta). A
+        # gente calibra medindo o avanco real entre o inicio do Play e a
+        # proxima pausa, e usa essa taxa medida daí em diante.
+        self._measured_fps = None
+
         root = QWidget(self)
         layout = QVBoxLayout(root)
         layout.setContentsMargins(4, 4, 4, 4)
@@ -303,21 +325,123 @@ class WaveformDocker(DockWidget):
                     self._timeline_table = tables[0]
                     # O QTimer nao dispara durante a reproducao nativa (o
                     # loop de playback do Krita nao cede vez pros timers
-                    # Python), mas o viewport da tabela nativa continua
-                    # sendo repintado a cada frame do Play - entao a gente
-                    # "pega carona" nesse repaint via event filter.
-                    self._timeline_table.viewport().installEventFilter(self)
+                    # Python), mas algo nesses widgets deve se repintar a
+                    # cada frame do Play - a gente tenta pegar carona nisso
+                    # via event filter em varios pontos da arvore.
+                    watch = [d, self._timeline_table,
+                             self._timeline_table.viewport(),
+                             self._timeline_table.horizontalHeader()]
+                    for w in watch:
+                        w.installEventFilter(self)
                 break
         return self._timeline_table
 
     def eventFilter(self, obj, event):
         if event.type() == _PAINT_EVENT_TYPE:
+            if self._timeline_table is not None and obj is self._timeline_table.viewport():
+                now = time.monotonic()
+                self._viewport_paint_gap = now - self._last_viewport_paint_at
+                self._last_viewport_paint_at = now
             self._sync_from_timeline()
         return super().eventFilter(obj, event)
 
-    def _sync_from_timeline(self):
-        if self._doc is not None:
+    def _is_playing(self):
+        now = time.monotonic()
+        recent = (now - self._last_viewport_paint_at) < 0.4
+        fast = 0 < self._viewport_paint_gap < 0.4
+        return recent and fast
+
+    def _find_speed_spinbox(self):
+        """Localiza o QSpinBox "Velocidade" (25%-200%) da Linha do Tempo
+        nativa - a estimativa de frame durante o Play precisa multiplicar
+        o fps por essa velocidade, senao desanda quando ela nao e 100%."""
+        if self._speed_spinbox is not None:
+            try:
+                self._speed_spinbox.value()
+                return self._speed_spinbox
+            except RuntimeError:
+                self._speed_spinbox = None
+        table = self._find_timeline_table()
+        if table is None:
+            return None
+        docker = table.parent()
+        while docker is not None and docker.objectName() != "TimelineDocker":
+            docker = docker.parent()
+        if docker is None:
+            return None
+        for sb in docker.findChildren(QSpinBox):
+            if sb.minimum() == 25 and sb.maximum() == 200:
+                self._speed_spinbox = sb
+                break
+        return self._speed_spinbox
+
+    def _get_playback_speed(self):
+        sb = self._find_speed_spinbox()
+        if sb is None:
+            return 1.0
+        try:
+            return max(1, sb.value()) / 100.0
+        except Exception:
+            return 1.0
+
+    def _calibrate_fps(self):
+        """Mede a taxa real de avanco de frames do ultimo trecho de Play
+        comparando com o doc.currentTime() real no momento da pausa, e
+        usa isso pra corrigir futuras estimativas - o fps nominal do
+        documento nem sempre bate com a velocidade real de reproducao
+        alcancada pela renderizacao."""
+        if self._play_started_at is None:
+            return
+        elapsed = time.monotonic() - self._play_started_at
+        if elapsed < 0.5:
+            return
+        advance = self._doc.currentTime() - self._play_started_frame
+        if advance <= 0:
+            return  # deu loop no meio do trecho ou nao avancou; nao calibra
+        speed = self._last_speed or 1.0
+        measured = (advance / elapsed) / speed
+        if measured <= 0:
+            return
+        self._measured_fps = (
+            measured if self._measured_fps is None
+            else 0.5 * self._measured_fps + 0.5 * measured)
+
+    def _update_current_frame(self):
+        if self._doc is None:
+            return
+        if not self._is_playing():
+            self._calibrate_fps()
+            self._play_started_at = None
+            self._last_speed = None
             self._view.set_current_frame(self._doc.currentTime())
+            return
+
+        now = time.monotonic()
+        speed = self._get_playback_speed()
+        fps = self._measured_fps or (self._doc.framesPerSecond() or 24)
+        if self._play_started_at is None:
+            self._play_started_at = now
+            self._play_started_frame = self._doc.currentTime()
+        elif speed != self._last_speed:
+            # Reancora no frame estimado ate agora antes de trocar de
+            # velocidade, pra nao dar salto na hora da mudanca.
+            self._play_started_frame += int(
+                (now - self._play_started_at) * fps * self._last_speed)
+            self._play_started_at = now
+        self._last_speed = speed
+
+        frame = self._play_started_frame + int((now - self._play_started_at) * fps * speed)
+        try:
+            start = self._doc.playbackStartTime()
+            end = self._doc.playBackEndTime()
+            if end > start:
+                frame = start + (frame - start) % (end - start + 1)
+        except Exception:
+            pass
+        self._view.set_current_frame(frame)
+
+    def _sync_from_timeline(self):
+        self._update_current_frame()
         self._sync_timeline_scroll()
 
     def _sync_timeline_scroll(self):
