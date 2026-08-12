@@ -5,6 +5,9 @@ animação (via `ffmpeg`), desenha a waveform alinhada ao eixo de frames
 e mantém tudo sincronizado com a Linha do Tempo da Animação nativa —
 como uma trilha de áudio de editor de vídeo, embaixo dos frames.
 
+Gratuito e open source. Se esse plugin te ajudou, considere apoiar:
+[buymeacoffee.com/targinu](https://buymeacoffee.com/targinu).
+
 ## Funcionalidades
 
 - Desenha a waveform (min/max por bloco) do áudio do documento atual.
