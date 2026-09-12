@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>Waveform Timeline Manual</title>
+</head>
+<body>
+
+<h1 id="waveform-timeline">Waveform Timeline</h1>
+<p>Docker que decodifica o áudio embutido no documento de animação
+(via <code>ffmpeg</code>), desenha a waveform alinhada ao eixo de
+frames e mantém tudo sincronizado com a Linha do Tempo da Animação
+nativa — como uma trilha de áudio de editor de vídeo, embaixo dos
+frames.</p>
+
+<h2 id="requisitos">Requisitos</h2>
+<p><strong>ffmpeg</strong> precisa estar instalado e disponível no
+<code>PATH</code> do sistema (usado para decodificar o áudio e tocar
+os trechos de preview ao arrastar o mouse).</p>
+
+<h2 id="ativando-o-painel">Ativando o painel</h2>
+<p>Vá em <strong>Configurações → Painéis → Waveform Timeline</strong>
+pra exibir o painel. Recomenda-se arrastar a aba do painel pra
+encaixar logo abaixo da Linha do Tempo da Animação nativa, ocupando a
+largura toda — assim a waveform fica alinhada como uma trilha de
+áudio.</p>
+
+<h2 id="uso-basico">Uso básico</h2>
+<p>Abra um documento de animação com uma trilha de áudio. O painel
+mostra o nome do arquivo, a duração e o fps assim que encontra o
+áudio. Use <strong>Recarregar</strong> se trocar o arquivo de áudio.</p>
+<ul>
+<li>Clique em qualquer ponto da waveform pra pular o frame atual do
+documento pra lá.</li>
+<li>Clique e arraste sobre a waveform pra tocar um trecho curto do
+áudio daquele ponto enquanto navega pelos picos (preview tipo
+"scrub").</li>
+</ul>
+
+<h2 id="traco-vermelho">O traço vermelho (indicador de frame)</h2>
+<p>O traço vermelho reflete o frame atual real do documento
+(<code>currentTime()</code>). Ele acompanha na hora quando você clica
+ou arrasta o mouse sobre a waveform, ou quando arrasta o cursor da
+Linha do Tempo nativa.</p>
+<p>Durante o <strong>Play</strong> nativo da animação, o Krita não
+expõe a posição real de reprodução via scripting, então o traço fica
+parado na posição de quando o Play começou — ele não tenta "adivinhar"
+nem acompanhar o play em andamento. Assim que você pausa ou para a
+reprodução, ele volta a refletir o frame real.</p>
+
+<h2 id="limitacoes">Limitações conhecidas</h2>
+<p>A sincronização de scroll/zoom da waveform com a Linha do Tempo
+nativa depende de detalhes internos do Krita que não fazem parte da
+API pública de scripting — pode parar de funcionar em versões futuras
+do Krita.</p>
+
+</body>
+</html>

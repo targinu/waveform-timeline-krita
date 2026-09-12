@@ -19,8 +19,11 @@ Gratuito e open source. Se esse plugin te ajudou, considere apoiar:
 - Arrastar o mouse sobre a waveform toca um trecho curto do áudio
   daquele ponto (preview tipo "scrub" de editor de vídeo), via
   `ffplay`.
-- O indicador de frame acompanha a reprodução nativa (Play) da
-  animação, incluindo mudanças de velocidade no controle nativo.
+- O indicador de frame (traço vermelho) reflete o frame real do
+  documento e acompanha na hora cliques/arrastos na waveform ou na
+  Linha do Tempo nativa. Durante o Play nativo ele fica parado (o
+  Krita não expõe a posição real de reprodução via scripting nesse
+  momento) e volta a acompanhar assim que você pausa.
 
 ## Requisitos
 
@@ -80,18 +83,13 @@ de recursos por sistema:
 
 ## Limitações conhecidas
 
-- A sincronização de scroll/zoom e do indicador de frame durante o
-  Play dependem de detalhes internos do Krita que não fazem parte da
-  API pública de scripting — podem parar de funcionar em versões
-  futuras do Krita.
+- A sincronização de scroll/zoom com a Linha do Tempo nativa depende
+  de detalhes internos do Krita que não fazem parte da API pública de
+  scripting — pode parar de funcionar em versões futuras do Krita.
 - Durante o Play nativo, o Krita não expõe a posição real de
-  reprodução via scripting (nem `currentTime()`, nem o estado dos
-  widgets da Linha do Tempo refletem isso). O indicador acompanha por
-  **estimativa**: mede o tempo decorrido e calibra a taxa real de
-  avanço comparando com a posição real a cada pausa. Isso significa
-  que a primeira reprodução após abrir o documento pode ficar um
-  pouco imprecisa até a calibração se ajustar (a partir da primeira
-  pausa, fica bem mais preciso).
+  reprodução via scripting (`currentTime()` fica congelado), então o
+  indicador de frame fica parado enquanto a animação toca e só volta
+  a acompanhar quando você pausa ou para.
 
 ## Como funciona por baixo dos panos
 

@@ -3,6 +3,6 @@ Type=Service
 ServiceTypes=Krita/PythonPlugin
 X-KDE-Library=waveform_timeline
 X-Python-2-Compatible=false
-X-Krita-Manual=
+X-Krita-Manual=Manual.html
 Name=Waveform Timeline
 Comment=Docker de waveform sincronizado com a linha do tempo de animacao
